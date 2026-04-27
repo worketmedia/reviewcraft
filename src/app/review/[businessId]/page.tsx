@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useParams } from 'next/navigation'
-import { FaStar, FaChevronLeft, FaCheckCircle, FaRegCopy, FaGoogle } from 'react-icons/fa'
+import { FaStar, FaChevronLeft, FaCheckCircle, FaRegCopy, FaGoogle, FaSpinner } from 'react-icons/fa'
 
 const BUSINESS_NAME = "The Green Leaf Cafe"
 const LOCATION = "Navrangpura, Ahmedabad"
@@ -22,6 +22,8 @@ export default function ReviewFlow() {
   const [currentStep, setCurrentStep] = useState(1)
   
   // State
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [overallRating, setOverallRating] = useState<number>(0)
   const [categoryRatings, setCategoryRatings] = useState<Record<string, number>>({})
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -100,9 +102,91 @@ export default function ReviewFlow() {
     return reviewParts.join(" ")
   }
 
-  const generateReviewText = () => {
-    setGeneratedReview(buildReviewContent())
+  const fetchGeneratedReview = async () => {
+    try {
+      const response = await fetch('/api/generate-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: BUSINESS_NAME,
+          location: LOCATION,
+          overallRating,
+          categoryRatings,
+          selectedTags,
+          additionalComment
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate review')
+      }
+
+      const data = await response.json()
+      if (data.review) {
+        setGeneratedReview(data.review)
+      } else {
+        throw new Error('No review returned')
+      }
+    } catch (error) {
+      console.error(error)
+      // Fallback manual build if API fails
+      setGeneratedReview(buildReviewContent())
+    }
+  }
+
+  const generateReviewText = async () => {
+    setIsGenerating(true)
+    await fetchGeneratedReview()
+    setIsGenerating(false)
     nextStep()
+  }
+
+  const handleRegenerate = async () => {
+    setIsGenerating(true)
+    await fetchGeneratedReview()
+    setIsGenerating(false)
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      // Try modern API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback: create textarea, must be triggered by user click
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  };
+
+  const handleCopyAndPost = async () => {
+    await copyToClipboard(generatedReview)
+    nextStep()
+  }
+
+  const handleOpenGoogle = async () => {
+    await copyToClipboard(generatedReview)
+    setTimeout(() => {
+      window.open('https://google.com', '_blank')
+      nextStep()
+    }, 500)
+  }
+
+  const handleCopyAgain = async () => {
+    await copyToClipboard(generatedReview)
   }
 
   const toggleTag = (tag: string) => {
@@ -259,9 +343,11 @@ export default function ReviewFlow() {
       <div className="mt-6">
         <button 
           onClick={generateReviewText}
-          className="w-full bg-[#1B4D3E] text-white py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px]"
+          disabled={isGenerating}
+          className="w-full flex items-center justify-center space-x-2 bg-[#1B4D3E] text-white py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px] disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Generate My Review
+          {isGenerating && <FaSpinner className="animate-spin" />}
+          <span>{isGenerating ? 'Generating...' : 'Generate My Review'}</span>
         </button>
       </div>
     </div>
@@ -290,20 +376,20 @@ export default function ReviewFlow() {
 
       <div className="mt-auto space-y-4">
         <button 
-          onClick={nextStep}
-          className="w-full flex items-center justify-center space-x-2 bg-[#1B4D3E] text-white py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px]"
+          onClick={handleCopyAndPost}
+          className="w-full flex items-center justify-center space-x-2 py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px] transition-colors bg-[#1B4D3E] text-white"
         >
           <FaRegCopy size={20} />
           <span>Copy & Post on Google</span>
         </button>
         
         <button 
-          onClick={() => {
-            setGeneratedReview(buildReviewContent())
-          }}
-          className="w-full bg-white text-[#1B4D3E] border-2 border-[#1B4D3E] py-4 rounded-xl font-semibold text-lg min-h-[44px]"
+          onClick={handleRegenerate}
+          disabled={isGenerating}
+          className="w-full flex items-center justify-center space-x-2 bg-white text-[#1B4D3E] border-2 border-[#1B4D3E] py-4 rounded-xl font-semibold text-lg min-h-[44px] disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Regenerate
+          {isGenerating && <FaSpinner className="animate-spin" />}
+          <span>{isGenerating ? 'Regenerating...' : 'Regenerate'}</span>
         </button>
       </div>
     </div>
@@ -331,19 +417,20 @@ export default function ReviewFlow() {
 
       <div className="mt-auto w-full space-y-4">
         <button 
-          onClick={() => {
-            // fake open google and go to final step
-            window.open('https://google.com', '_blank')
-            nextStep()
-          }}
+          onClick={handleOpenGoogle}
           className="w-full flex items-center justify-center space-x-3 bg-[#4285F4] hover:bg-[#3367d6] text-white py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px]"
         >
           <FaGoogle size={20} />
           <span>Open Google Reviews</span>
         </button>
         
-        <button className="text-gray-500 text-sm font-medium underline py-2 min-h-[44px] w-full text-center">
-          Tap to copy again
+        <button 
+          onClick={handleCopyAgain}
+          className={`text-sm font-medium py-2 min-h-[44px] w-full text-center transition-colors ${
+            copied ? 'text-green-600' : 'text-gray-500 underline'
+          }`}
+        >
+          {copied ? '✓ Copied!' : 'Tap to copy again'}
         </button>
       </div>
     </div>
