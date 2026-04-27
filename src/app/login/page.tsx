@@ -22,12 +22,20 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: authData, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (error) throw error
-        router.push('/dashboard')
+
+        // Check if user already has a business set up
+        const { data: business } = await supabase
+          .from('businesses')
+          .select('id')
+          .eq('user_id', authData.user.id)
+          .maybeSingle()
+
+        router.push(business ? '/dashboard' : '/onboarding')
       } else {
         if (password !== confirmPassword) {
           throw new Error('Passwords do not match')
