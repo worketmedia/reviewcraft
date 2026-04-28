@@ -27,20 +27,37 @@ export async function proxy(request: NextRequest) {
     }
   )
 
+  const pathname = request.nextUrl.pathname
+
+  // PUBLIC routes — no auth check needed at all
+  const isPublicRoute =
+    pathname.startsWith('/review/') ||
+    pathname.startsWith('/api/') ||
+    pathname === '/'
+
+  if (isPublicRoute) {
+    return supabaseResponse
+  }
+
+  // For all other routes, check auth
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isDashboardRoute = request.nextUrl.pathname.startsWith('/dashboard')
-  const isOnboardingRoute = request.nextUrl.pathname.startsWith('/onboarding')
-  const isLoginRoute = request.nextUrl.pathname === '/login'
+  const isLoginRoute = pathname === '/login'
+  const isProtectedRoute =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/admin')
 
-  if (!user && (isDashboardRoute || isOnboardingRoute)) {
+  // Redirect unauthenticated users away from protected routes
+  if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
+  // Redirect authenticated users away from login page
   if (user && isLoginRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
