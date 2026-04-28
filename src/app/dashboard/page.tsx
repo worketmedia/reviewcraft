@@ -122,7 +122,7 @@ export default function DashboardPage() {
 
         {/* ── Tab Content ── */}
         <div className="flex-1 overflow-y-auto pb-24">
-          {activeTab === 'home'      && business && <HomeTab      business={business} sessions={sessions} onRefresh={refreshSessions} />}
+          {activeTab === 'home'      && business && <HomeTab      business={business} sessions={sessions} onRefresh={refreshSessions} supabase={supabase} />}
           {activeTab === 'qr'        && business && <QRTab        business={business} />}
           {activeTab === 'customize' && business && <CustomizeTab business={business} supabase={supabase} />}
           {activeTab === 'analytics' && business && <AnalyticsTab sessions={sessions} />}
@@ -156,7 +156,7 @@ export default function DashboardPage() {
 }
 
 // ─── HOME TAB ─────────────────────────────────────────────────────────────────
-function HomeTab({ business, sessions, onRefresh }: { business: Business; sessions: ReviewSession[]; onRefresh: () => void }) {
+function HomeTab({ business, sessions, onRefresh, supabase }: { business: Business; sessions: ReviewSession[]; onRefresh: () => void; supabase: any }) {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
@@ -177,6 +177,12 @@ function HomeTab({ business, sessions, onRefresh }: { business: Business; sessio
   ]
 
   const recent = sessions.slice(0, 3)
+  const feedbackSessions = sessions.filter(s => s.status === 'private_feedback')
+
+  const handleResolve = async (id: string) => {
+    await supabase.from('review_sessions').update({ status: 'resolved' }).eq('id', id)
+    onRefresh()
+  }
 
   return (
     <div className="p-5 space-y-6">
@@ -236,6 +242,41 @@ function HomeTab({ business, sessions, onRefresh }: { business: Business; sessio
           </div>
         )}
       </div>
+
+      {/* Private Feedback */}
+      {feedbackSessions.length > 0 && (
+        <div>
+          <h3 className="font-semibold text-gray-800 mb-3">⚠️ Private Feedback</h3>
+          <div className="space-y-3">
+            {feedbackSessions.map(session => (
+              <div key={session.id} className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex">
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} className={s <= (session.overall_rating ?? 0) ? 'text-[#D4A843]' : 'text-gray-200'}>★</span>
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {new Date(session.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+                {session.private_feedback && (
+                  <p className="text-sm text-gray-700">{session.private_feedback}</p>
+                )}
+                {session.customer_contact && (
+                  <p className="text-xs text-gray-500">📞 {session.customer_contact}</p>
+                )}
+                <button
+                  onClick={() => handleResolve(session.id)}
+                  className="text-xs font-medium text-[#1B4D3E] bg-white border border-[#1B4D3E]/20 px-3 py-1.5 rounded-lg hover:bg-[#1B4D3E]/5 transition-colors"
+                >
+                  Mark as Resolved
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

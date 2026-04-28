@@ -143,7 +143,7 @@ export default function AdminPage() {
         <main className="flex-1 p-6">
           {activeTab === 'overview' && <OverviewTab businesses={businesses} sessions={sessions} />}
           {activeTab === 'businesses' && <BusinessesTab businesses={businesses} sessions={sessions} supabase={supabase} />}
-          {activeTab === 'reviews' && <div className="text-gray-500 text-center py-20">Reviews tab — coming soon</div>}
+          {activeTab === 'reviews' && <ReviewsTab businesses={businesses} sessions={sessions} supabase={supabase} />}
           {activeTab === 'create' && <div className="text-gray-500 text-center py-20">Create Business — coming soon</div>}
           {activeTab === 'settings' && <div className="text-gray-500 text-center py-20">Settings — coming soon</div>}
         </main>
@@ -434,6 +434,63 @@ function BusinessesTab({ businesses, sessions, supabase }: { businesses: Busines
             </div>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+/* ── REVIEWS TAB (Private Feedback) ───────────────────────────── */
+
+function ReviewsTab({ businesses, sessions, supabase }: { businesses: Business[]; sessions: ReviewSession[]; supabase: any }) {
+  const bizMap = Object.fromEntries(businesses.map(b => [b.id, b.name]))
+  const feedbackSessions = sessions.filter(s => s.status === 'private_feedback')
+
+  const handleResolve = async (id: string) => {
+    await supabase.from('review_sessions').update({ status: 'resolved' }).eq('id', id)
+    window.location.reload()
+  }
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Private Feedback</h2>
+
+      {feedbackSessions.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <div className="text-4xl mb-3">✅</div>
+          <p className="text-gray-500">No pending private feedback. All clear!</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {feedbackSessions.map(session => (
+            <div key={session.id} className="bg-white border border-red-100 rounded-xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-gray-800">{bizMap[session.business_id] ?? 'Unknown'}</span>
+                  <div className="flex">
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} className={`text-sm ${s <= (session.overall_rating ?? 0) ? 'text-[#D4A843]' : 'text-gray-200'}`}>★</span>
+                    ))}
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400">
+                  {new Date(session.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              {session.private_feedback && (
+                <p className="text-sm text-gray-700 bg-red-50 rounded-lg p-3">{session.private_feedback}</p>
+              )}
+              {session.customer_contact && (
+                <p className="text-xs text-gray-500">📞 Contact: {session.customer_contact}</p>
+              )}
+              <button
+                onClick={() => handleResolve(session.id)}
+                className="text-xs font-medium text-[#1B4D3E] bg-[#1B4D3E]/5 border border-[#1B4D3E]/20 px-4 py-2 rounded-lg hover:bg-[#1B4D3E]/10 transition-colors"
+              >
+                Mark as Resolved
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
