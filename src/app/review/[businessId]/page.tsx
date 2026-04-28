@@ -232,7 +232,7 @@ export default function ReviewFlow() {
         ? business.google_place_id
         : 'https://google.com'
       window.open(url, '_blank')
-      nextStep()
+      setCurrentStep(8)
     }, 500)
   }
 
@@ -611,7 +611,7 @@ export default function ReviewFlow() {
                 customer_contact: customerContact,
                 status: 'private_feedback',
               })
-              nextStep()
+              setCurrentStep(8)
             }}
             className="w-full bg-[#1B4D3E] text-white py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px]"
           >
@@ -628,6 +628,17 @@ export default function ReviewFlow() {
     )
   }
 
+  const renderStep8 = () => (
+    <div className="flex flex-col items-center justify-center h-full py-12 flex-1 mt-8 text-center">
+      <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+        <FaCheckCircle className="text-green-500" size={50} />
+      </div>
+      <h2 className="text-3xl font-bold mb-4">Thank you!</h2>
+      <p className="text-xl text-gray-600 mb-2">Your feedback means the world to {BUSINESS_NAME}.</p>
+      <p className="text-sm text-gray-400 mt-8">Powered by ReviewCraft</p>
+    </div>
+  )
+
   const renderStep = () => {
     switch (currentStep) {
       case 1: return renderStep1()
@@ -637,6 +648,7 @@ export default function ReviewFlow() {
       case 5: return renderStep5()
       case 6: return renderStep6()
       case 7: return renderStep7()
+      case 8: return renderStep8()
       default: return renderStep1()
     }
   }
