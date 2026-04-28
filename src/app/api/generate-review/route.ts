@@ -1,6 +1,35 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
+const SYSTEM_PROMPT = `You write Google reviews on behalf of real customers based on their feedback. Your reviews must sound like a real person wrote them on their phone after a meal.
+
+LANGUAGE:
+- If english: Write in natural, casual English
+- If hindi: Write in Hindi using Devanagari script
+- If hinglish: Write in casual Hinglish like real Indian Google reviews. Mix Hindi and English naturally. Example: 'Butter chicken bahut accha tha, staff bhi friendly. Family ke saath gaye the, everyone loved it. Price bhi reasonable hai.'
+
+TONE:
+- If friendly: Casual, warm, like texting a friend about a good meal
+- If professional: Clean and polished but still natural
+- If enthusiastic: High energy, exclamation marks, genuine excitement
+
+UNIQUENESS RULES (CRITICAL):
+- Never start two reviews the same way. Rotate between:
+  * Starting with the dish: 'The butter chicken at [name]...'
+  * Starting with occasion: 'Went with family to [name]...'
+  * Starting with discovery: 'Finally tried [name]...'
+  * Starting with location: 'Best place in [area] for...'
+  * Starting with comparison: 'Been to many [category] in [city] but...'
+  * Starting with emotion: 'What a find!'
+  * Starting with recommendation: 'A colleague suggested...'
+- Vary vocabulary: never repeat 'delicious' in every review. Use: 'fantastic', 'solid', 'really good', 'nailed it', 'worth every bite', 'on point', 'paisa vasool'
+- Mix review lengths: some 2 sentences, some 4-5 sentences
+- NEVER use: 'I highly recommend', 'I recently visited', 'exceeded expectations', 'hidden gem', 'culinary delight', 'a must visit'
+- Include the business name, area, and specific items naturally
+- If previousReviews are provided, use COMPLETELY different openings and structures
+
+OUTPUT: Return only the review text. No quotes, no explanation.`
+
 export async function POST(req: Request) {
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -8,20 +37,33 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { businessName, overallRating, categoryRatings, selectedTags, additionalComment, location, businessDescription } = body
+    const {
+      businessName,
+      overallRating,
+      categoryRatings,
+      selectedTags,
+      additionalComment,
+      location,
+      businessDescription,
+      language = 'english',
+      tone = 'friendly',
+      previousReviews = [],
+    } = body
 
     if (!businessName) {
       return NextResponse.json({ error: 'Business name is required' }, { status: 400 })
     }
 
-    const systemPrompt = "You are a review writing assistant helping customers write detailed Google reviews. Write a genuine, natural-sounding review based on their feedback.\n\nRules:\n- Write in first person as the customer\n- Keep it 3-5 sentences\n- IMPORTANT: Naturally include the business name, location/area, and specific dish or service names in the review text. These are SEO keywords.\n- Mention the type of cuisine or business category naturally\n- Sound like a real person, not a template\n- Vary sentence structure and vocabulary every time\n- Never start with 'I recently visited' or 'I had the pleasure'\n- Never end with 'I highly recommend' or 'I can't wait to come back'\n- Use casual, warm language like a real Google review\n\nExample good review: 'The butter chicken at The Green Leaf Cafe in Navrangpura was hands down the best I've had in Ahmedabad. Staff was super friendly and the cozy vibe made it perfect for our family dinner. Great portions and very fairly priced — we'll be back for the biryani next time.'\n\nNotice how it includes: business name, area, city, specific dish names, ambiance description, and value mention — all naturally."
+    let userPrompt = `Business: ${businessName}
+Location: ${location || 'Not specified'}
+Overall Rating: ${overallRating} out of 5 stars
+Language: ${language}
+Tone: ${tone}
+`
 
-    let userPrompt = `Business: ${businessName}\nLocation: ${location || 'Not specified'}\nOverall Rating: ${overallRating} out of 5 stars\n`
-    
     if (businessDescription) {
       userPrompt += `Business Description / Context: ${businessDescription}\n`
     }
-    
     if (categoryRatings && Object.keys(categoryRatings).length > 0) {
       userPrompt += `Category Ratings: ${JSON.stringify(categoryRatings)}\n`
     }
@@ -31,15 +73,18 @@ export async function POST(req: Request) {
     if (additionalComment) {
       userPrompt += `Additional Comment: "${additionalComment}"\n`
     }
+    if (previousReviews.length > 0) {
+      userPrompt += `\nPrevious review openings to AVOID (use completely different structure):\n${previousReviews.map((r: string, i: number) => `${i + 1}. "${r}"`).join('\n')}\n`
+    }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: 'gpt-4o-mini',
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
       ],
-      temperature: 0.9,
-      max_tokens: 200,
+      temperature: 0.95,
+      max_tokens: 250,
     })
 
     const review = completion.choices[0]?.message?.content?.trim() || ''
