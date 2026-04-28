@@ -149,6 +149,7 @@ export default function ReviewFlow() {
           categoryRatings,
           selectedTags,
           additionalComment,
+          businessDescription: business?.description,
         }),
       })
       if (!res.ok) throw new Error('API error')
@@ -219,7 +220,7 @@ export default function ReviewFlow() {
     await copyToClipboard(generatedReview)
     setTimeout(() => {
       const url = business?.google_place_id
-        ? `https://search.google.com/local/writereview?placeid=${business.google_place_id}`
+        ? business.google_place_id
         : 'https://google.com'
       window.open(url, '_blank')
       nextStep()
@@ -269,7 +270,7 @@ export default function ReviewFlow() {
 
   const renderStep1 = () => (
     <div className="flex flex-col h-full items-center justify-center text-center space-y-6 flex-1 mt-10">
-      <div className="w-24 h-24 bg-[#1B4D3E]/10 rounded-full flex items-center justify-center mb-4">
+      <div className="w-20 h-20 bg-[#1B4D3E]/10 rounded-full flex items-center justify-center mb-4 shrink-0">
         {business.logo_url
           ? <img src={business.logo_url} alt={BUSINESS_NAME} className="w-full h-full rounded-full object-cover" />
           : <span className="text-4xl">🌿</span>
@@ -277,6 +278,10 @@ export default function ReviewFlow() {
       </div>
       <h1 className="text-3xl font-bold text-[#1A1A1A]">{BUSINESS_NAME}</h1>
       <p className="text-gray-500 text-lg">{LOCATION}</p>
+
+      {business.description && (
+        <p className="text-gray-600 text-sm max-w-[280px] italic mt-2">"{business.description}"</p>
+      )}
 
       <div className="my-8 max-w-[280px]">
         <p className="text-lg leading-relaxed text-gray-700">
@@ -524,7 +529,7 @@ export default function ReviewFlow() {
               className="w-full flex items-center justify-center space-x-3 bg-gray-200 text-gray-400 py-4 rounded-xl font-semibold text-lg min-h-[44px] cursor-not-allowed"
             >
               <FaGoogle size={20} />
-              <span>Google Place ID not configured</span>
+              <span>Google Review link not configured</span>
             </button>
           )}
 

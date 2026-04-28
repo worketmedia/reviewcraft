@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   FaHome, FaQrcode, FaSlidersH, FaChartBar,
   FaSpinner, FaTimes, FaPlus, FaCopy, FaDownload,
-  FaSignOutAlt
+  FaSignOutAlt, FaImage, FaCheckCircle, FaChevronDown, FaChevronUp
 } from 'react-icons/fa'
 import QRCode from 'qrcode'
 import type { Business, HighlightTag, MenuItem, ReviewSession } from '@/types'
@@ -342,6 +342,19 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
   const [msgSaved, setMsgSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
+  // New fields
+  const [placeId, setPlaceId] = useState(business.google_place_id ?? '')
+  const [savingPlaceId, setSavingPlaceId] = useState(false)
+  const [placeIdSaved, setPlaceIdSaved] = useState(false)
+  const [showPlaceIdHelp, setShowPlaceIdHelp] = useState(false)
+
+  const [description, setDescription] = useState(business.description ?? '')
+  const [savingDesc, setSavingDesc] = useState(false)
+  const [descSaved, setDescSaved] = useState(false)
+
+  const [logoPreview, setLogoPreview] = useState(business.logo_url ?? '')
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+
   useEffect(() => {
     async function fetchData() {
       const [tagsRes, itemsRes] = await Promise.all([
@@ -396,6 +409,41 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
     setSavingMsg(false); setMsgSaved(true); setTimeout(() => setMsgSaved(false), 2000)
   }
 
+  const savePlaceId = async () => {
+    setSavingPlaceId(true)
+    await supabase.from('businesses').update({ google_place_id: placeId }).eq('id', business.id)
+    setSavingPlaceId(false); setPlaceIdSaved(true); setTimeout(() => setPlaceIdSaved(false), 2000)
+  }
+
+  const saveDescription = async () => {
+    setSavingDesc(true)
+    await supabase.from('businesses').update({ description }).eq('id', business.id)
+    setSavingDesc(false); setDescSaved(true); setTimeout(() => setDescSaved(false), 2000)
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingLogo(true)
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${business.user_id}-${Date.now()}.${fileExt}`
+    
+    const { error: uploadError } = await supabase.storage
+      .from('logos')
+      .upload(fileName, file)
+      
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('logos')
+        .getPublicUrl(fileName)
+      
+      await supabase.from('businesses').update({ logo_url: publicUrl }).eq('id', business.id)
+      setLogoPreview(publicUrl)
+    }
+    setUploadingLogo(false)
+  }
+
   if (isLoading) return (
     <div className="flex items-center justify-center py-20">
       <FaSpinner className="animate-spin text-[#1B4D3E]" size={28} />
@@ -404,6 +452,121 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
 
   return (
     <div className="p-5 space-y-8">
+
+      {/* Google Reviews Connection */}
+      <section className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 relative">
+        <h3 className="font-semibold text-gray-800 mb-1">Google Reviews Connection</h3>
+        <div className="text-sm text-gray-500 mb-4 flex items-center justify-between">
+          <span>Current Status:</span>
+          {business.google_place_id ? (
+            <span className="flex items-center gap-1 text-green-600 font-medium">
+              <FaCheckCircle /> Connected
+            </span>
+          ) : (
+            <span className="text-gray-400">Not connected</span>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Google Review Link</label>
+            <input
+              value={placeId}
+              onChange={e => setPlaceId(e.target.value)}
+              placeholder="Paste your full Google review link here"
+              className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/50"
+            />
+          </div>
+
+          <button
+            onClick={savePlaceId}
+            disabled={savingPlaceId}
+            className={`w-full py-3 rounded-xl font-semibold text-sm transition-colors min-h-[44px] ${
+              placeIdSaved ? 'bg-green-600 text-white' : 'bg-[#1B4D3E] text-white'
+            }`}
+          >
+            {savingPlaceId ? 'Saving...' : placeIdSaved ? '✓ Connected!' : 'Save Connection'}
+          </button>
+
+          <div className="border border-gray-100 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setShowPlaceIdHelp(!showPlaceIdHelp)}
+              className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between text-sm font-medium text-gray-700"
+            >
+              How to find your review link
+              {showPlaceIdHelp ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+            </button>
+            {showPlaceIdHelp && (
+              <div className="p-4 bg-white text-sm text-gray-600 space-y-2 border-t border-gray-100">
+                <p>How to find it: Open Google Maps → Search your business → Click your listing → Click 'Ask for reviews' → Copy the link</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Logo Upload */}
+      <section>
+        <h3 className="font-semibold text-gray-800 mb-3">Business Logo</h3>
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-full border border-gray-200 flex items-center justify-center bg-gray-50 overflow-hidden shrink-0 relative">
+            {uploadingLogo && (
+              <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
+                <FaSpinner className="animate-spin text-[#1B4D3E]" size={20} />
+              </div>
+            )}
+            {logoPreview ? (
+              <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <FaImage className="text-gray-300 text-3xl" />
+            )}
+          </div>
+          <div className="flex-1">
+            <label className="block w-full cursor-pointer">
+              <span className="sr-only">Choose logo</span>
+              <input
+                type="file"
+                accept="image/png, image/jpeg, image/svg+xml"
+                onChange={handleLogoUpload}
+                disabled={uploadingLogo}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#1B4D3E]/10 file:text-[#1B4D3E] hover:file:bg-[#1B4D3E]/20 transition-colors cursor-pointer disabled:opacity-50"
+              />
+            </label>
+            <p className="text-xs text-gray-400 mt-2">Recommended: Square image, transparent background</p>
+          </div>
+        </div>
+      </section>
+
+      <hr className="border-gray-100" />
+
+      {/* Business Description */}
+      <section>
+        <h3 className="font-semibold text-gray-800 mb-3">Business Description</h3>
+        <p className="text-xs text-gray-500 mb-2">Used by our AI to generate more relevant and personalized reviews.</p>
+        <div className="relative">
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value.slice(0, 200))}
+            rows={3}
+            placeholder="E.g. 'Authentic Gujarati thali restaurant serving home-style food since 2015'"
+            className="w-full border border-gray-300 rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/50 resize-none"
+          />
+          <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+            {description.length}/200
+          </div>
+        </div>
+        <button
+          onClick={saveDescription}
+          disabled={savingDesc}
+          className={`mt-2 w-full py-3 rounded-xl font-semibold text-sm transition-colors min-h-[44px] ${
+            descSaved ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          {savingDesc ? 'Saving...' : descSaved ? '✓ Saved!' : 'Save Description'}
+        </button>
+      </section>
+
+      <hr className="border-gray-100" />
 
       {/* Welcome message */}
       <section>

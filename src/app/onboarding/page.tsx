@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { FaSpinner, FaTimes, FaPlus, FaExternalLinkAlt } from 'react-icons/fa'
+import { FaSpinner, FaTimes, FaPlus, FaExternalLinkAlt, FaImage } from 'react-icons/fa'
 
 const CATEGORY_TAGS: Record<string, string[]> = {
   Restaurant: ["Delicious food", "Fresh ingredients", "Great portions", "Quick service", "Friendly staff", "Cozy atmosphere", "Clean and hygienic", "Value for money", "Perfect for families", "Great for date night"],
@@ -35,6 +35,9 @@ export default function OnboardingPage() {
   const [city, setCity] = useState('')
   const [area, setArea] = useState('')
   const [category, setCategory] = useState('Restaurant')
+  const [description, setDescription] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
   // Step 2
   const [placeId, setPlaceId] = useState('')
@@ -77,6 +80,25 @@ export default function OnboardingPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('You must be logged in')
 
+      let logo_url = null
+
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop()
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`
+        const filePath = `${fileName}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('logos')
+          .upload(filePath, logoFile)
+          
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('logos')
+            .getPublicUrl(filePath)
+          logo_url = publicUrl
+        }
+      }
+
       // Insert business
       const { data: business, error: bizError } = await supabase
         .from('businesses')
@@ -86,6 +108,8 @@ export default function OnboardingPage() {
           city,
           area,
           category,
+          description,
+          logo_url,
           google_place_id: placeId || null,
         })
         .select()
@@ -210,6 +234,50 @@ export default function OnboardingPage() {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
+                  <div className="relative">
+                    <textarea
+                      value={description}
+                      onChange={e => setDescription(e.target.value.slice(0, 200))}
+                      placeholder="Describe your business in one line, e.g. 'Authentic Gujarati thali restaurant serving home-style food since 2015'"
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/50 resize-none text-sm"
+                    />
+                    <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+                      {description.length}/200
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Business Logo</label>
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl border border-gray-300 flex items-center justify-center bg-gray-50 overflow-hidden shrink-0">
+                      {logoPreview ? (
+                        <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <FaImage className="text-gray-400 text-2xl" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/png, image/jpeg, image/svg+xml"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            setLogoFile(file)
+                            setLogoPreview(URL.createObjectURL(file))
+                          }
+                        }}
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#1B4D3E]/10 file:text-[#1B4D3E] hover:file:bg-[#1B4D3E]/20 transition-colors"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">PNG, JPG or SVG</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-auto pt-6">
@@ -240,31 +308,25 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Google Place ID</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Google Review Link</label>
                 <input
                   type="text"
                   value={placeId}
                   onChange={e => setPlaceId(e.target.value)}
-                  placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
+                  placeholder="Paste your full Google review link here"
                   className="w-full border border-gray-300 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/50 min-h-[44px]"
                 />
               </div>
 
               <div className="bg-[#1B4D3E]/5 rounded-xl p-4 space-y-2">
-                <p className="text-sm font-semibold text-[#1B4D3E]">How to find your Place ID:</p>
+                <p className="text-sm font-semibold text-[#1B4D3E]">How to find your link:</p>
                 <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>Go to Google Maps</li>
-                  <li>Search for your business</li>
-                  <li>Copy the Place ID from the URL</li>
+                  <li>Open Google Maps on your phone or computer</li>
+                  <li>Search for your business name</li>
+                  <li>Tap on your business listing</li>
+                  <li>Tap 'Ask for reviews'</li>
+                  <li>Copy the link and paste it here</li>
                 </ol>
-                <a
-                  href="https://developers.google.com/maps/documentation/places/web-service/place-id"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sm text-[#1B4D3E] font-medium underline mt-2"
-                >
-                  Official guide <FaExternalLinkAlt size={11} />
-                </a>
               </div>
 
               <div className="mt-auto pt-6 space-y-3">
@@ -343,7 +405,12 @@ export default function OnboardingPage() {
             <div className="flex flex-col flex-1 pt-4 space-y-6">
               <div>
                 <h2 className="text-2xl font-bold">
-                  {['Restaurant', 'Cafe'].includes(category) ? 'Add your popular items' : 'Add your services'}
+                  {category === 'Restaurant' || category === 'Cafe' ? 'Add your star dishes' :
+                   category === 'Salon & Spa' ? 'Add your popular services' :
+                   category === 'Hotel' ? 'Add your room types and amenities' :
+                   category === 'Clinic' ? 'Add your specializations' :
+                   category === 'Retail Store' ? 'Add your popular products' :
+                   'Add your popular items'}
                 </h2>
                 <p className="text-gray-500 mt-1 text-sm">
                   These help personalise reviews with specific {ITEM_LABEL[category] || 'item'} names.

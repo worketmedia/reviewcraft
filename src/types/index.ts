@@ -6,6 +6,7 @@ export interface Business {
   category?: string | null
   logo_url?: string | null
   welcome_message?: string | null
+  description?: string | null
   city?: string | null
   area?: string | null
   created_at: string
