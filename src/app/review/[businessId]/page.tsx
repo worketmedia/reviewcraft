@@ -8,6 +8,15 @@ import type { Business, HighlightTag, MenuItem } from '@/types'
 
 const CATEGORIES = ["Food Quality", "Service", "Ambiance", "Cleanliness", "Value for Money"]
 
+// ─── Default fallback tags (used when business has no DB tags) ───────────────
+const FALLBACK_TAGS: Record<string, string[]> = {
+  'Food': ['Delicious food', 'Fresh ingredients', 'Great portions', 'Tasty dishes', 'Best in town'],
+  'Service': ['Quick service', 'Friendly staff', 'Great recommendations', 'Attentive service'],
+  'Ambiance': ['Cozy atmosphere', 'Perfect for families', 'Great for date night', 'Clean and well-maintained'],
+  'Value': ['Worth every rupee', 'Great value for money', 'Affordable prices'],
+  'Cleanliness': ['Spotlessly clean', 'Well-maintained', 'Hygienic'],
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function buildReviewContent(
@@ -126,8 +135,8 @@ export default function ReviewFlow() {
 
   const handleNextFromOverall = async () => {
     const sid = await createSession()
-    await updateSession({ overall_rating: overallRating }, sid ?? undefined)
-    if (overallRating <= 2) {
+    await updateSession({ overall_rating: overallRating, status: 'rated' }, sid ?? undefined)
+    if (overallRating <= 3) {
       setCurrentStep(7)
     } else {
       nextStep()
@@ -301,6 +310,7 @@ export default function ReviewFlow() {
 
   const renderStep2 = () => {
     const moods = ["", "Poor", "Below Average", "Average", "Great", "Amazing!"]
+    const isLowRating = overallRating > 0 && overallRating <= 3
     return (
       <div className="flex flex-col h-full py-8 flex-1 mt-8">
         <h2 className="text-2xl font-bold text-center mb-12">How was your overall experience?</h2>
@@ -317,16 +327,40 @@ export default function ReviewFlow() {
           {overallRating > 0 ? moods[overallRating] : ""}
         </p>
 
-        <div className="mt-auto pt-10">
-          <button
-            onClick={handleNextFromOverall}
-            disabled={overallRating === 0}
-            className={`w-full py-4 rounded-xl font-semibold text-lg transition-colors min-h-[44px] ${
-              overallRating > 0 ? "bg-[#1B4D3E] text-white shadow-lg" : "bg-gray-200 text-gray-400 cursor-not-allowed"
-            }`}
-          >
-            Next
-          </button>
+        {isLowRating && (
+          <div className="mt-6 bg-orange-50 border border-orange-100 rounded-2xl p-5 text-center space-y-4">
+            <p className="text-orange-700 font-medium text-lg">We're sorry your experience wasn't great 😔</p>
+            <p className="text-gray-500 text-sm">Would you like to share private feedback so we can improve?</p>
+          </div>
+        )}
+
+        <div className="mt-auto pt-8 space-y-3">
+          {isLowRating ? (
+            <>
+              <button
+                onClick={handleNextFromOverall}
+                className="w-full py-4 rounded-xl font-semibold text-lg bg-[#1B4D3E] text-white shadow-lg transition-colors min-h-[44px]"
+              >
+                Share Private Feedback
+              </button>
+              <button
+                onClick={() => { nextStep() }}
+                className="w-full py-3 rounded-xl font-medium text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors min-h-[44px]"
+              >
+                Skip to public review anyway
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleNextFromOverall}
+              disabled={overallRating === 0}
+              className={`w-full py-4 rounded-xl font-semibold text-lg transition-colors min-h-[44px] ${
+                overallRating > 0 ? "bg-[#1B4D3E] text-white shadow-lg" : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              Next
+            </button>
+          )}
         </div>
       </div>
     )
@@ -368,11 +402,11 @@ export default function ReviewFlow() {
 
   const renderStep4 = () => {
     const categoryMapping: Record<string, string> = {
-      "Food Quality": "Food",
-      "Service": "Service",
-      "Ambiance": "Ambiance",
-      "Cleanliness": "Cleanliness",
-      "Value for Money": "Value",
+      'Food Quality': 'Food',
+      'Service': 'Service',
+      'Ambiance': 'Ambiance',
+      'Cleanliness': 'Cleanliness',
+      'Value for Money': 'Value',
     }
 
     const highRatedKeys = Object.entries(categoryRatings)
@@ -380,12 +414,15 @@ export default function ReviewFlow() {
       .map(([cat]) => categoryMapping[cat])
       .filter(Boolean)
 
-    // Use DB highlights; fall back to all sections
-    let sectionsToShow = Object.entries(highlights)
-    if (sectionsToShow.length === 0) {
-      // No DB tags — nothing to show
-    } else if (highRatedKeys.length > 0) {
-      sectionsToShow = sectionsToShow.filter(([section]) => highRatedKeys.includes(section))
+    // Use DB tags if available; otherwise use fallback defaults
+    const hasDbTags = Object.keys(highlights).length > 0
+    const sourceMap: Record<string, string[]> = hasDbTags ? highlights : FALLBACK_TAGS
+
+    // Show only high-rated sections; if none rated >= 4, show all
+    let sectionsToShow = Object.entries(sourceMap)
+    if (highRatedKeys.length > 0) {
+      const filtered = sectionsToShow.filter(([section]) => highRatedKeys.includes(section))
+      if (filtered.length > 0) sectionsToShow = filtered
     }
 
     return (
@@ -394,34 +431,29 @@ export default function ReviewFlow() {
         <p className="text-gray-500 mb-6">Tap everything that applies</p>
 
         <div className="space-y-8 flex-1 overflow-y-auto pb-6">
-          {sectionsToShow.length > 0
-            ? sectionsToShow.map(([section, tags]) => (
-                <div key={section}>
-                  <h3 className="font-semibold text-gray-800 mb-3">{section}</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map(tag => {
-                      const isSelected = selectedTags.includes(tag)
-                      return (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`px-4 py-2 min-h-[44px] rounded-full text-sm border transition-colors ${
-                            isSelected
-                              ? 'bg-[#1B4D3E] text-white border-[#1B4D3E]'
-                              : 'bg-white text-gray-700 border-gray-300 hover:border-[#1B4D3E]'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))
-            : (
-              <p className="text-gray-400 text-sm text-center py-8">No highlight tags configured for this business.</p>
-            )
-          }
+          {sectionsToShow.map(([section, tags]) => (
+            <div key={section}>
+              <h3 className="font-semibold text-gray-800 mb-3">{section}</h3>
+              <div className="flex flex-wrap gap-2">
+                {tags.map(tag => {
+                  const isSelected = selectedTags.includes(tag)
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`px-4 py-2 min-h-[44px] rounded-full text-sm border transition-colors ${
+                        isSelected
+                          ? 'bg-[#1B4D3E] text-white border-[#1B4D3E]'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-[#1B4D3E]'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
 
           <div className="mt-6">
             <h3 className="font-semibold text-gray-800 mb-3">Anything else?</h3>
@@ -547,21 +579,9 @@ export default function ReviewFlow() {
   }
 
   const renderStep7 = () => {
-    if (overallRating > 2) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full py-12 flex-1 mt-8 text-center">
-          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
-            <FaCheckCircle className="text-green-500" size={50} />
-          </div>
-          <h2 className="text-3xl font-bold mb-4">Thank you!</h2>
-          <p className="text-xl text-gray-600">Your review helps {BUSINESS_NAME} grow.</p>
-        </div>
-      )
-    }
-
     return (
       <div className="flex flex-col h-full py-8 flex-1 mt-8">
-        <h2 className="text-3xl font-bold mb-4 text-center">We're sorry</h2>
+        <h2 className="text-3xl font-bold mb-4 text-center">We're sorry 😔</h2>
         <p className="text-gray-600 mb-8 text-center">We want to make things right. Please tell us what went wrong.</p>
 
         <div className="space-y-6">
@@ -583,7 +603,7 @@ export default function ReviewFlow() {
           </div>
         </div>
 
-        <div className="mt-auto pt-8">
+        <div className="mt-auto pt-8 space-y-3">
           <button
             onClick={async () => {
               await updateSession({
@@ -596,6 +616,12 @@ export default function ReviewFlow() {
             className="w-full bg-[#1B4D3E] text-white py-4 rounded-xl font-semibold text-lg shadow-lg min-h-[44px]"
           >
             Send Feedback
+          </button>
+          <button
+            onClick={() => setCurrentStep(3)}
+            className="w-full py-3 rounded-xl font-medium text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors min-h-[44px]"
+          >
+            I'd still like to leave a public review
           </button>
         </div>
       </div>
