@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { FaSpinner } from 'react-icons/fa'
-import type { Business, HighlightTag } from '@/types'
+import type { Business, HighlightTag, MenuItem } from '@/types'
 
 // ─── Fallback tags ────────────────────────────────────────────
 const FALLBACK_TAGS: Record<string, string[]> = {
