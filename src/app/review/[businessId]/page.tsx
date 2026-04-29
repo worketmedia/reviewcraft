@@ -28,7 +28,7 @@ const CAT_FACES = [
   { emoji: '🤩', val: 5 },
 ]
 
-type Lang = 'english' | 'hindi' | 'hinglish'
+type Lang = 'english' | 'hindi' | 'hinglish' | 'gujarati'
 type Tone = 'friendly' | 'professional' | 'enthusiastic'
 
 // ─── Main Component ───────────────────────────────────────────
@@ -39,6 +39,7 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
   // Data
   const [business, setBusiness]     = useState<Business | null>(null)
   const [highlights, setHighlights] = useState<Record<string, string[]>>({})
+  const [menuItems, setMenuItems]   = useState<MenuItem[]>([])
   const [isLoading, setIsLoading]   = useState(true)
   const [notFound, setNotFound]     = useState(false)
 
@@ -58,9 +59,9 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
   const [showPublicAnyway, setShowPublicAnyway] = useState(false)
   const [feedbackSent, setFeedbackSent]     = useState(false)
 
-  // Screen 2 - quick reviews
-  const [quickReviews, setQuickReviews]     = useState<string[]>([])
-  const [quickLoading, setQuickLoading]     = useState(true)
+  // Screen 3 - Customer fields
+  const [customerName, setCustomerName]   = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
 
   // Screen 3 state
   const [generatedReview, setGeneratedReview] = useState('')
@@ -88,32 +89,15 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
         }
         setHighlights(grouped)
       }
-      setIsLoading(false)
 
-      // Prefetch quick reviews
-      fetchQuickReviews(biz as Business)
+      const { data: mItems } = await supabase
+        .from('menu_items').select('*').eq('business_id', businessId).order('sort_order')
+      setMenuItems((mItems ?? []) as MenuItem[])
+
+      setIsLoading(false)
     }
     load()
   }, [businessId])
-
-  // ─── Quick reviews prefetch ─────────────────────────────────
-  const fetchQuickReviews = async (biz: Business) => {
-    try {
-      const res = await fetch('/api/generate-quick-reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: biz.name, city: biz.city, area: biz.area,
-          category: biz.category,
-          highlightTags: Object.values(FALLBACK_TAGS).flat().slice(0, 6),
-          language: 'hinglish',
-        }),
-      })
-      const data = await res.json()
-      if (data.reviews) setQuickReviews(data.reviews)
-    } catch { /* silent */ }
-    setQuickLoading(false)
-  }
 
   // ─── Session helpers ────────────────────────────────────────
   const createSession = useCallback(async () => {
@@ -161,7 +145,8 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
           selectedTags, additionalComment: comment,
           businessDescription: business?.description,
           language: lang, tone,
-          previousReviews: quickReviews.map(r => r.split('.')[0]),
+          keywords: business?.keywords,
+          menuItems: menuItems.map(i => i.name),
         }),
       })
       const data = await res.json()
@@ -193,16 +178,13 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
     setFeedbackSent(true)
   }
 
-  const handleUseQuickReview = async (review: string) => {
-    setGeneratedReview(review)
-    const sid = await createSession()
-    await updateSession({ generated_review: review, status: 'generated' }, sid ?? undefined)
-    setScreen(3)
-  }
-
   const handleCopyAndGo = async () => {
+    await updateSession({
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      status: 'copied'
+    })
     await copyText(generatedReview)
-    await updateSession({ status: 'copied' })
     setTimeout(() => {
       const url = business?.google_place_id || 'https://google.com'
       window.open(url, '_blank')
@@ -220,7 +202,9 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
           overallRating: mood !== null ? MOODS[mood].stars : 4,
           categoryRatings: catRatings, selectedTags, additionalComment: comment,
           businessDescription: business?.description, language: lang, tone,
-          previousReviews: [generatedReview.split('.')[0], ...quickReviews.map(r => r.split('.')[0])],
+          keywords: business?.keywords,
+          menuItems: menuItems.map(i => i.name),
+          previousReviews: [generatedReview.split('.')[0]],
         }),
       })
       const data = await res.json()
@@ -378,6 +362,41 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
           ))}
         </div>
 
+        {/* Bill items (Menu) */}
+        {menuItems.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800 text-sm">What did you order?</h3>
+            <div className="flex flex-wrap gap-2">
+              {menuItems.map(item => {
+                const sel = selectedTags.includes(item.name)
+                if (item.image_url) {
+                  return (
+                    <button key={item.id} onClick={() => setSelectedTags(p => sel ? p.filter(t => t !== item.name) : [...p, item.name])}
+                      className={`flex flex-col items-center gap-2 p-2 rounded-xl border transition-all w-[calc(33.33%-8px)] ${
+                        sel ? 'bg-[#EDF5F0] border-[#1B4D3E] shadow-sm' : 'bg-white border-gray-100 shadow-xs'
+                      }`}>
+                      <div className="w-full aspect-square rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden shrink-0 border border-gray-100">
+                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      </div>
+                      <span className={`text-[10px] text-center font-medium leading-tight line-clamp-2 ${sel ? 'text-[#1B4D3E]' : 'text-gray-600'}`}>
+                        {item.name}
+                      </span>
+                    </button>
+                  )
+                }
+                return (
+                  <button key={item.id} onClick={() => setSelectedTags(p => sel ? p.filter(t => t !== item.name) : [...p, item.name])}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                      sel ? 'bg-[#1B4D3E] text-white border-[#1B4D3E] shadow-md' : 'bg-white text-gray-600 border-[#E8E5DE]'
+                    }`}>
+                    {item.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Comment */}
         <textarea className="w-full border border-[#E8E5DE] rounded-xl p-3 text-sm min-h-[60px] focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/30 bg-white"
           placeholder="Add your own words (optional)" value={comment} onChange={e => setComment(e.target.value)} />
@@ -385,9 +404,9 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
         {/* Language + Tone */}
         <div className="space-y-3">
           <div className="flex gap-2">
-            {([['english','English'],['hindi','हिंदी'],['hinglish','Hinglish']] as const).map(([v,l]) => (
+            {([['english','English'],['hindi','हिंदी'],['hinglish','Hinglish'],['gujarati','ગુજરાતી']] as const).map(([v,l]) => (
               <button key={v} onClick={() => setLang(v)}
-                className={`flex-1 py-2 rounded-xl text-xs font-medium min-h-[44px] border transition-colors ${
+                className={`flex-1 py-2 rounded-xl text-[10px] font-medium min-h-[44px] border transition-colors ${
                   lang === v ? 'bg-[#1B4D3E] text-white border-[#1B4D3E]' : 'bg-white text-gray-600 border-[#E8E5DE]'
                 }`}>{l}</button>
             ))}
@@ -408,31 +427,6 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
           {isGenerating ? <><FaSpinner className="animate-spin" /><span>Generating...</span></> : <span>Generate My Review ✨</span>}
         </button>
 
-        {/* Divider */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400">or pick a ready review</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
-
-        {/* Quick reviews */}
-        <div className="space-y-3">
-          {quickLoading ? (
-            [1,2].map(i => (
-              <div key={i} className="bg-white rounded-2xl p-4 border border-[#E8E5DE] animate-pulse">
-                <div className="h-3 bg-gray-200 rounded w-3/4 mb-2" />
-                <div className="h-3 bg-gray-200 rounded w-full mb-2" />
-                <div className="h-3 bg-gray-200 rounded w-1/2" />
-              </div>
-            ))
-          ) : quickReviews.map((r, i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 border border-[#E8E5DE] shadow-sm">
-              <p className="text-sm text-gray-700 mb-3 leading-relaxed">{r}</p>
-              <button onClick={() => handleUseQuickReview(r)}
-                className="text-xs font-semibold text-[#1B4D3E] min-h-[44px]">Use This →</button>
-            </div>
-          ))}
-        </div>
       </>)}
     </div>
   )
@@ -462,6 +456,32 @@ export default function ReviewPage({ params }: { params: Promise<{ businessId: s
         className="text-sm text-[#1B4D3E] font-medium underline min-h-[44px] flex items-center justify-center gap-2 self-center">
         {isGenerating ? <><FaSpinner className="animate-spin" size={12} /> Regenerating...</> : '🔄 Regenerate'}
       </button>
+
+      {/* Optional Customer Fields */}
+      <div className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-100">
+        <div className="space-y-3">
+          <input
+            type="text"
+            placeholder="Your name (optional)"
+            value={customerName}
+            onChange={e => setCustomerName(e.target.value)}
+            className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/30 bg-white min-h-[44px]"
+          />
+          <div className="flex items-center gap-2">
+            <div className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-500 font-medium min-h-[44px] flex items-center">
+              +91
+            </div>
+            <input
+              type="tel"
+              placeholder="Phone number (optional)"
+              value={customerPhone}
+              onChange={e => setCustomerPhone(e.target.value)}
+              className="flex-1 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/30 bg-white min-h-[44px]"
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 text-center">So the business can thank you personally</p>
+        </div>
+      </div>
 
       <button onClick={handleCopyAndGo}
         className="w-full bg-[#1B4D3E] text-white py-3.5 rounded-2xl font-semibold text-base shadow-md min-h-[48px] flex items-center justify-center gap-2">

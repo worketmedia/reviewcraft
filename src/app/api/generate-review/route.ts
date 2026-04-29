@@ -1,34 +1,45 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-const SYSTEM_PROMPT = `You write Google reviews on behalf of real customers based on their feedback. Your reviews must sound like a real person wrote them on their phone after a meal.
+const SYSTEM_PROMPT = `You are writing a Google review as if you are a real customer who just visited this business. 
 
-LANGUAGE:
-- If english: Write in natural, casual English
-- If hindi: Write in Hindi using Devanagari script
-- If hinglish: Write in casual Hinglish like real Indian Google reviews. Mix Hindi and English naturally. Example: 'Butter chicken bahut accha tha, staff bhi friendly. Family ke saath gaye the, everyone loved it. Price bhi reasonable hai.'
+CRITICAL RULES:
+- NEVER copy or paraphrase the business description. The description is context for you, NOT text to include in the review.
+- If you're having trouble thinking of what to say, use the provided keywords as inspiration.
+- This business has a menu with various items. Reference specific dish names from the bill items list provided, not generic food descriptions.
+- Write as if you are a regular person typing on your phone after a meal. Keep it casual.
+- Every review must be structurally unique. Vary these elements EVERY time:
+  * Opening style (rotate between 8+ different approaches)
+  * Sentence count (2-5 sentences, random)
+  * Which details you mention first
+  * How you describe the food (taste? texture? presentation? portion?)
+  * Whether you mention price, service, vibe, or skip some
+  * Ending style (abrupt, recommending, planning next visit, tagging a friend vibe)
 
-TONE:
-- If friendly: Casual, warm, like texting a friend about a good meal
-- If professional: Clean and polished but still natural
-- If enthusiastic: High energy, exclamation marks, genuine excitement
+- LANGUAGE STYLES:
+  * english: Natural casual English like a real Google review
+  * hindi: Hindi in Devanagari script, casual tone
+  * hinglish: Mix of Hindi and English like real Indians type. Example: 'Butter chicken ekdum mast tha, aur staff bahut friendly. Family ke saath gaye the, sab ko pasand aaya. Price bhi theek hai.'
+  * gujarati: Gujarati in Gujarati script, casual tone. Example: 'બટર ચિકન બહુ સરસ હતું, સ્ટાફ પણ ફ્રેન્ડલી. ફેમિલી સાથે ગયા હતા, બધાને ગમ્યું.'
 
-UNIQUENESS RULES (CRITICAL):
-- Never start two reviews the same way. Rotate between:
-  * Starting with the dish: 'The butter chicken at [name]...'
-  * Starting with occasion: 'Went with family to [name]...'
-  * Starting with discovery: 'Finally tried [name]...'
-  * Starting with location: 'Best place in [area] for...'
-  * Starting with comparison: 'Been to many [category] in [city] but...'
-  * Starting with emotion: 'What a find!'
-  * Starting with recommendation: 'A colleague suggested...'
-- Vary vocabulary: never repeat 'delicious' in every review. Use: 'fantastic', 'solid', 'really good', 'nailed it', 'worth every bite', 'on point', 'paisa vasool'
-- Mix review lengths: some 2 sentences, some 4-5 sentences
-- NEVER use: 'I highly recommend', 'I recently visited', 'exceeded expectations', 'hidden gem', 'culinary delight', 'a must visit'
-- Include the business name, area, and specific items naturally
-- If previousReviews are provided, use COMPLETELY different openings and structures
+- TONE:
+  * friendly: Like texting a friend
+  * professional: Clean but still human
+  * enthusiastic: Excited, uses exclamation marks naturally
 
-OUTPUT: Return only the review text. No quotes, no explanation.`
+- FORBIDDEN PHRASES (never use these):
+  'I highly recommend', 'I recently visited', 'exceeded expectations', 
+  'hidden gem', 'culinary delight', 'a must visit', 'nestled in',
+  'whether you are', 'look no further', 'does not disappoint',
+  'if you are looking for', 'you wont be disappointed',
+  'treat yourself', 'gem of a place'
+
+- DO NOT reference or repeat ANY text from the business description field
+- DO NOT start with the business name every time
+- DO NOT always mention all selected tags — pick 2-3 randomly and skip the rest
+- DO NOT always follow the same order (food → service → ambiance)
+
+OUTPUT: Return ONLY the review text. Nothing else.`
 
 export async function POST(req: Request) {
   const openai = new OpenAI({
@@ -48,34 +59,32 @@ export async function POST(req: Request) {
       language = 'english',
       tone = 'friendly',
       previousReviews = [],
+      keywords = [],
+      menuItems = [],
     } = body
 
     if (!businessName) {
       return NextResponse.json({ error: 'Business name is required' }, { status: 400 })
     }
 
-    let userPrompt = `Business: ${businessName}
+    let userPrompt = `IMPORTANT: The business description below is background context only. Do NOT copy, quote, or paraphrase it in the review.
+Business description (DO NOT USE IN REVIEW): ${businessDescription || 'None'}
+Business name: ${businessName}
 Location: ${location || 'Not specified'}
-Overall Rating: ${overallRating} out of 5 stars
+Rating: ${overallRating} out of 5 stars
+Customer highlighted: ${selectedTags && selectedTags.length > 0 ? selectedTags.join(', ') : 'Nothing specific'}
+Additional comment: ${additionalComment || 'None'}
 Language: ${language}
 Tone: ${tone}
+SEO Keywords to include naturally: ${keywords && keywords.length > 0 ? keywords.join(', ') : 'None'}
+Available Bill Items to reference: ${menuItems && menuItems.length > 0 ? menuItems.join(', ') : 'None'}
 `
 
-    if (businessDescription) {
-      userPrompt += `Business Description / Context: ${businessDescription}\n`
-    }
-    if (categoryRatings && Object.keys(categoryRatings).length > 0) {
-      userPrompt += `Category Ratings: ${JSON.stringify(categoryRatings)}\n`
-    }
-    if (selectedTags && selectedTags.length > 0) {
-      userPrompt += `Highlights selected by customer: ${selectedTags.join(', ')}\n`
-    }
-    if (additionalComment) {
-      userPrompt += `Additional Comment: "${additionalComment}"\n`
-    }
     if (previousReviews.length > 0) {
       userPrompt += `\nPrevious review openings to AVOID (use completely different structure):\n${previousReviews.map((r: string, i: number) => `${i + 1}. "${r}"`).join('\n')}\n`
     }
+
+    userPrompt += `\nWrite the review now.`
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',

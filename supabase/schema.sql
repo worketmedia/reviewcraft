@@ -75,3 +75,32 @@ DROP POLICY IF EXISTS "Business owners can view their sessions" ON review_sessio
 CREATE POLICY "Business owners can view their sessions"
   ON review_sessions FOR SELECT
   USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+
+-- New columns for features
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS keywords TEXT[] DEFAULT '{}';
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS menu_urls TEXT[] DEFAULT '{}';
+ALTER TABLE review_sessions ADD COLUMN IF NOT EXISTS customer_name TEXT;
+ALTER TABLE review_sessions ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- Storage setup (Instructions for Supabase SQL Editor)
+/*
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('logos', 'logos', true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('menu-images', 'menu-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('menus', 'menus', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage Policies
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING (bucket_id IN ('logos', 'menu-images', 'menus'));
+
+DROP POLICY IF EXISTS "Authenticated Upload" ON storage.objects;
+CREATE POLICY "Authenticated Upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id IN ('logos', 'menu-images', 'menus') AND auth.role() = 'authenticated');
+*/

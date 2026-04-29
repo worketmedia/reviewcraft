@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   FaHome, FaQrcode, FaSlidersH, FaChartBar,
   FaSpinner, FaTimes, FaPlus, FaCopy, FaDownload,
-  FaSignOutAlt, FaImage, FaCheckCircle, FaChevronDown, FaChevronUp
+  FaSignOutAlt, FaImage, FaCheckCircle, FaChevronDown, FaChevronUp, FaWhatsapp
 } from 'react-icons/fa'
 import QRCode from 'qrcode'
 import type { Business, HighlightTag, MenuItem, ReviewSession } from '@/types'
@@ -285,14 +285,16 @@ function HomeTab({ business, sessions, onRefresh, supabase }: { business: Busine
 function QRTab({ business }: { business: Business }) {
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [copied, setCopied] = useState(false)
+  const cardCanvasRef = useRef<HTMLCanvasElement>(null)
+  const stickerCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/review/${business.id}`
 
   useEffect(() => {
     QRCode.toDataURL(reviewUrl, {
-      width: 300,
+      width: 1000,
       margin: 2,
-      color: { dark: '#1B4D3E', light: '#FFFFFF' },
+      color: { dark: '#000000', light: '#FFFFFF' },
     }).then(setQrDataUrl)
   }, [reviewUrl])
 
@@ -311,63 +313,268 @@ function QRTab({ business }: { business: Business }) {
     } catch {}
   }
 
-  const handleDownload = () => {
-    if (!qrDataUrl) return
-    const a = document.createElement('a')
-    a.href = qrDataUrl
-    a.download = `${business.name.replace(/\s+/g, '-').toLowerCase()}-qr.png`
-    a.click()
+  const handleWhatsApp = () => {
+    const text = `Hi! Please rate us on Google using this link: ${reviewUrl}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const generateImage = (type: 'card' | 'sticker') => {
+    const canvas = type === 'card' ? cardCanvasRef.current : stickerCanvasRef.current
+    if (!canvas || !qrDataUrl) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Scale everything up
+    const S = type === 'card' ? 2 : 2
+    
+    // Clear
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, width, height)
+
+    const drawContent = async () => {
+      // 1. Multicolored Google "G"
+      ctx.save()
+      const gSize = (type === 'card' ? 80 : 60) * S
+      const gX = (width - gSize) / 2
+      const gY = (type === 'card' ? 60 : 40) * S
+      
+      const scale = gSize / 48
+      ctx.translate(gX, gY)
+      ctx.scale(scale, scale)
+
+      const pRed = new Path2D("M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z")
+      const pBlue = new Path2D("M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z")
+      const pYellow = new Path2D("M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z")
+      const pGreen = new Path2D("M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z")
+
+      ctx.fillStyle = "#EA4335"; ctx.fill(pRed)
+      ctx.fillStyle = "#4285F4"; ctx.fill(pBlue)
+      ctx.fillStyle = "#FBBC05"; ctx.fill(pYellow)
+      ctx.fillStyle = "#34A853"; ctx.fill(pGreen)
+      ctx.restore()
+
+      // 2. Typography
+      const textY = (type === 'card' ? 180 : 130) * S
+      ctx.textAlign = 'center'
+      
+      ctx.fillStyle = '#70757a'
+      ctx.font = `${(type === 'card' ? 24 : 18) * S}px sans-serif`
+      ctx.fillText('review us', width / 2, textY)
+      
+      ctx.fillStyle = '#000000'
+      ctx.font = `bold ${(type === 'card' ? 34 : 26) * S}px sans-serif`
+      ctx.fillText('on Google', width / 2, textY + ((type === 'card' ? 40 : 30) * S))
+
+      // 3. Stars
+      const starY = textY + ((type === 'card' ? 85 : 65) * S)
+      const starSize = (type === 'card' ? 32 : 24) * S
+      const starGap = 6 * S
+      const totalW = (starSize * 5) + (starGap * 4)
+      let startX = (width - totalW) / 2
+      
+      ctx.fillStyle = '#FBBC05'
+      for (let i = 0; i < 5; i++) {
+        ctx.font = `${starSize}px sans-serif`
+        ctx.fillText('★', startX + (starSize / 2), starY)
+        startX += starSize + starGap
+      }
+
+      // 4. QR Code
+      const qrImage = new Image()
+      qrImage.src = qrDataUrl
+      await new Promise(resolve => { qrImage.onload = resolve })
+      const qrSize = (type === 'card' ? 320 : 220) * S
+      const qrY = (type === 'card' ? 330 : 210) * S
+      ctx.drawImage(qrImage, (width - qrSize) / 2, qrY, qrSize, qrSize)
+
+      // 4b. Logo in QR center
+      if (business.logo_url) {
+        const logoImg = new Image()
+        logoImg.crossOrigin = 'anonymous'
+        logoImg.src = business.logo_url
+        try {
+          await new Promise((resolve, reject) => {
+            logoImg.onload = resolve
+            logoImg.onerror = reject
+            setTimeout(reject, 3000)
+          })
+          const innerLogoSize = qrSize * 0.2
+          const lx = (width - innerLogoSize) / 2
+          const ly = qrY + (qrSize - innerLogoSize) / 2
+          
+          ctx.fillStyle = '#FFFFFF'
+          ctx.fillRect(lx - (2 * S), ly - (2 * S), innerLogoSize + (4 * S), innerLogoSize + (4 * S))
+          ctx.drawImage(logoImg, lx, ly, innerLogoSize, innerLogoSize)
+        } catch (e) {}
+      }
+
+      // 5. Business Name & Logo
+      const bizY = (type === 'card' ? 700 : 455) * S
+      ctx.fillStyle = '#000000'
+      ctx.font = `bold ${(type === 'card' ? 22 : 16) * S}px sans-serif`
+      
+      if (business.logo_url) {
+        const logoImg = new Image()
+        logoImg.crossOrigin = 'anonymous'
+        logoImg.src = business.logo_url
+        try {
+          await new Promise((resolve, reject) => {
+            logoImg.onload = resolve
+            logoImg.onerror = reject
+            setTimeout(reject, 3000)
+          })
+          const logoSize = (type === 'card' ? 36 : 28) * S
+          const textW = ctx.measureText(business.name).width
+          const startX = (width - textW - logoSize - (10 * S)) / 2
+          ctx.drawImage(logoImg, startX, bizY - (logoSize / 2) - (5 * S), logoSize, logoSize)
+          ctx.textAlign = 'left'
+          ctx.fillText(business.name, startX + logoSize + (10 * S), bizY)
+        } catch (e) {
+          ctx.textAlign = 'center'
+          ctx.fillText(business.name, width / 2, bizY)
+        }
+      } else {
+        ctx.textAlign = 'center'
+        ctx.fillText(business.name, width / 2, bizY)
+      }
+
+      // 6. Location
+      ctx.fillStyle = '#70757a'
+      ctx.font = `${(type === 'card' ? 14 : 12) * S}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.fillText(`${business.area}, ${business.city}`, width / 2, bizY + ((type === 'card' ? 25 : 20) * S))
+
+      // 7. Footer
+      if (type === 'card') {
+        ctx.fillStyle = '#000000'
+        ctx.font = `${16 * S}px sans-serif`
+        ctx.fillText('Scan with your phone camera 📱', width / 2, 780 * S)
+        
+        ctx.strokeStyle = '#F3F4F6'
+        ctx.lineWidth = 1 * S
+        ctx.beginPath()
+        ctx.moveTo(100 * S, 830 * S)
+        ctx.lineTo(width - (100 * S), 830 * S)
+        ctx.stroke()
+        
+        ctx.fillStyle = '#9CA3AF'
+        ctx.font = `bold ${10 * S}px sans-serif`
+        ctx.fillText('POWERED BY REVIEWCRAFT', width / 2, 855 * S)
+      } else {
+        ctx.fillStyle = '#70757a'
+        ctx.font = `${12 * S}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.fillText('Scan to rate ⭐', width / 2, bizY + (45 * S))
+      }
+
+      const link = document.createElement('a')
+      link.download = `${business.name.replace(/\s+/g, '-').toLowerCase()}-${type}.png`
+      link.href = canvas.toDataURL('image/png', 1.0)
+      link.click()
+    }
+
+    drawContent()
   }
 
   return (
-    <div className="p-5 space-y-6">
+    <div className="p-5 space-y-8">
+      
+      <div className="space-y-4">
+        <h3 className="font-semibold text-gray-800 px-1">Live Preview</h3>
+        
+        {/* Card Preview Wrapper */}
+        <div className="bg-gray-200 rounded-3xl p-8 flex justify-center overflow-hidden border border-gray-300">
+          <div className="bg-white w-[280px] aspect-[2/3] rounded-2xl shadow-2xl flex flex-col items-center p-8 border border-gray-100 relative scale-110">
+            {/* Template UI Mockup (Card) */}
+            <div className="w-14 h-14 mb-4 flex items-center justify-center">
+              <svg viewBox="0 0 48 48" className="w-full h-full">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+              </svg>
+            </div>
+            <p className="text-gray-500 font-normal text-[10px] leading-tight">review us</p>
+            <p className="text-black font-bold text-base leading-tight mb-3">on Google</p>
+            
+            <div className="flex gap-1 mb-5 text-[#FBBC05] text-sm">
+              {[1,2,3,4,5].map(i => <span key={i}>★</span>)}
+            </div>
+            
+            <div className="w-40 h-40 bg-white rounded-xl flex items-center justify-center border border-gray-100 mb-6 relative">
+              {qrDataUrl ? (
+                <img src={qrDataUrl} alt="QR" className="w-[140px] h-[140px]" />
+              ) : (
+                <FaSpinner className="animate-spin text-gray-300" />
+              )}
+              {business.logo_url && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-white p-1 rounded-sm border border-gray-50">
+                    <img src={business.logo_url} alt="Logo" className="w-7 h-7 object-contain" />
+                  </div>
+                </div>
+              )}
+            </div>
 
-      {/* Table tent preview */}
-      <div className="bg-white border-2 border-[#1B4D3E]/20 rounded-3xl p-6 flex flex-col items-center shadow-sm">
-        <div className="w-12 h-12 bg-[#1B4D3E]/10 rounded-full flex items-center justify-center mb-3">
-          <span className="text-2xl">🌿</span>
-        </div>
-        <p className="text-xs font-bold text-[#1B4D3E] uppercase tracking-widest mb-1">Enjoyed your visit?</p>
-        <h3 className="text-lg font-bold text-gray-800 text-center mb-4">{business.name}</h3>
-
-        {qrDataUrl ? (
-          <img src={qrDataUrl} alt="QR Code" className="w-48 h-48 rounded-xl" />
-        ) : (
-          <div className="w-48 h-48 rounded-xl bg-gray-100 flex items-center justify-center">
-            <FaSpinner className="animate-spin text-gray-400" size={24} />
+            <div className="flex items-center gap-2 mb-1">
+              {business.logo_url && <img src={business.logo_url} className="w-5 h-5 rounded-full object-cover" alt="Logo" />}
+              <p className="text-xs font-bold text-gray-900">{business.name}</p>
+            </div>
+            <p className="text-[9px] text-gray-400">{business.area}, {business.city}</p>
+            
+            <div className="mt-auto w-full pt-4 border-t border-gray-50 flex flex-col items-center">
+              <p className="text-[9px] text-gray-900 font-medium">Scan with your phone camera 📱</p>
+              <p className="text-[7px] text-gray-300 mt-2 tracking-widest font-bold">POWERED BY REVIEWCRAFT</p>
+            </div>
           </div>
-        )}
+        </div>
 
-        <p className="text-sm text-gray-500 mt-4 text-center">Scan to share your experience</p>
-        <p className="text-[10px] text-gray-400 mt-2 font-medium">Powered by ReviewCraft</p>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => generateImage('card')} className="bg-[#1B4D3E] text-white py-4 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-all">
+            📥 Table Card
+          </button>
+          <button onClick={() => generateImage('sticker')} className="bg-white text-[#1B4D3E] border-2 border-[#1B4D3E] py-4 rounded-2xl font-bold text-sm active:scale-95 transition-all">
+            📥 Sticker
+          </button>
+        </div>
       </div>
 
-      {/* Action buttons */}
       <div className="space-y-3">
         <button
           onClick={handleCopy}
-          className={`w-full flex items-center justify-center gap-2 py-4 rounded-xl font-semibold text-base transition-colors min-h-[44px] ${
-            copied ? 'bg-green-600 text-white' : 'bg-[#1B4D3E] text-white'
+          className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-sm transition-all shadow-sm ${
+            copied ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-800 border border-gray-200'
           }`}
         >
           <FaCopy size={16} />
-          {copied ? 'Link Copied!' : 'Copy Review Link'}
+          {copied ? 'Link Copied!' : '📋 Copy Review Link'}
         </button>
 
         <button
-          onClick={handleDownload}
-          disabled={!qrDataUrl}
-          className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-semibold text-base border-2 border-[#1B4D3E] text-[#1B4D3E] min-h-[44px] disabled:opacity-50"
+          onClick={handleWhatsApp}
+          className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-sm bg-[#25D366] text-white shadow-sm active:scale-95 transition-all"
         >
-          <FaDownload size={16} />
-          Download QR Code
+          <FaWhatsapp size={18} />
+          💬 Share via WhatsApp
         </button>
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-4">
-        <p className="text-xs text-gray-500 font-medium mb-1">Review URL</p>
-        <p className="text-xs text-gray-700 break-all">{reviewUrl}</p>
+      {/* Hidden Canvases for high-quality export */}
+      <canvas ref={cardCanvasRef} width={1200} height={1800} className="hidden" />
+      <canvas ref={stickerCanvasRef} width={1000} height={1000} className="hidden" />
+
+      <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Your Unique Review Link</p>
+          <FaCheckCircle className={business.google_place_id ? 'text-green-500' : 'text-gray-300'} size={12} />
+        </div>
+        <p className="text-xs text-gray-600 break-all font-medium leading-relaxed">{reviewUrl}</p>
       </div>
+
     </div>
   )
 }
@@ -379,9 +586,21 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
   const [welcomeMsg, setWelcomeMsg] = useState(business.welcome_message ?? '')
   const [newTag, setNewTag] = useState('')
   const [newItem, setNewItem] = useState('')
+  const [newItemFile, setNewItemFile] = useState<File | null>(null)
+  const [newItemPreview, setNewItemPreview] = useState<string | null>(null)
   const [savingMsg, setSavingMsg] = useState(false)
   const [msgSaved, setMsgSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  // SEO Keywords
+  const [keywords, setKeywords] = useState<string[]>(business.keywords ?? [])
+  const [newKeyword, setNewKeyword] = useState('')
+  const [savingKeywords, setSavingKeywords] = useState(false)
+  const [keywordsSaved, setKeywordsSaved] = useState(false)
+
+  // Menu Card
+  const [menuUrls, setMenuUrls] = useState<string[]>(business.menu_urls ?? [])
+  const [uploadingMenu, setUploadingMenu] = useState(false)
 
   // New fields
   const [placeId, setPlaceId] = useState(business.google_place_id ?? '')
@@ -430,13 +649,82 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
   const addItem = async () => {
     const name = newItem.trim()
     if (!name || items.some(i => i.name === name)) return
+    
     const { data } = await supabase.from('menu_items').insert({
       business_id: business.id,
       name,
       sort_order: items.length,
     }).select().single()
+    
     if (data) setItems(prev => [...prev, data as MenuItem])
     setNewItem('')
+  }
+
+  const handleItemImageUpload = async (itemId: string, file: File) => {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${itemId}/${Date.now()}.${fileExt}`
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('menu-images')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
+      
+    if (uploadError) {
+      console.error('Item image upload error:', uploadError)
+    } else {
+      const { data: urlData } = supabase.storage
+        .from('menu-images')
+        .getPublicUrl(fileName)
+      
+      const publicUrl = urlData.publicUrl
+      await supabase.from('menu_items').update({ image_url: publicUrl }).eq('id', itemId)
+      setItems(prev => prev.map(item => item.id === itemId ? { ...item, image_url: publicUrl } : item))
+    }
+  }
+
+  const handleMenuUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    if (menuUrls.length + files.length > 3) {
+      alert('Maximum 3 menu files allowed')
+      return
+    }
+
+    setUploadingMenu(true)
+    const newUrls = [...menuUrls]
+
+    for (const file of files) {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${business.id}/${Date.now()}.${fileExt}`
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('menus')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+        
+      if (uploadError) {
+        console.error('Menu upload error:', uploadError)
+      } else {
+        const { data: urlData } = supabase.storage
+          .from('menus')
+          .getPublicUrl(fileName)
+        newUrls.push(urlData.publicUrl)
+      }
+    }
+
+    await supabase.from('businesses').update({ menu_urls: newUrls }).eq('id', business.id)
+    setMenuUrls(newUrls)
+    setUploadingMenu(false)
+  }
+
+  const removeMenu = async (url: string) => {
+    const newUrls = menuUrls.filter(u => u !== url)
+    await supabase.from('businesses').update({ menu_urls: newUrls }).eq('id', business.id)
+    setMenuUrls(newUrls)
   }
 
   const removeItem = async (id: string) => {
@@ -448,6 +736,24 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
     setSavingMsg(true)
     await supabase.from('businesses').update({ welcome_message: welcomeMsg }).eq('id', business.id)
     setSavingMsg(false); setMsgSaved(true); setTimeout(() => setMsgSaved(false), 2000)
+  }
+
+  const addKeyword = () => {
+    const kw = newKeyword.trim()
+    if (kw && !keywords.includes(kw)) {
+      setKeywords(prev => [...prev, kw])
+    }
+    setNewKeyword('')
+  }
+
+  const removeKeyword = (kw: string) => {
+    setKeywords(prev => prev.filter(k => k !== kw))
+  }
+
+  const saveKeywords = async () => {
+    setSavingKeywords(true)
+    await supabase.from('businesses').update({ keywords }).eq('id', business.id)
+    setSavingKeywords(false); setKeywordsSaved(true); setTimeout(() => setKeywordsSaved(false), 2000)
   }
 
   const savePlaceId = async () => {
@@ -468,17 +774,23 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
 
     setUploadingLogo(true)
     const fileExt = file.name.split('.').pop()
-    const fileName = `${business.user_id}-${Date.now()}.${fileExt}`
+    const fileName = `${business.user_id}/${Date.now()}.${fileExt}`
     
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('logos')
-      .upload(fileName, file)
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
       
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage
+    if (uploadError) {
+      console.error('Logo upload error:', uploadError)
+    } else {
+      const { data: urlData } = supabase.storage
         .from('logos')
         .getPublicUrl(fileName)
       
+      const publicUrl = urlData.publicUrl
       await supabase.from('businesses').update({ logo_url: publicUrl }).eq('id', business.id)
       setLogoPreview(publicUrl)
     }
@@ -660,17 +972,117 @@ function CustomizeTab({ business, supabase }: { business: Business; supabase: Re
         </div>
       </section>
 
+
+      {/* SEO Keywords */}
+      <section>
+        <h3 className="font-semibold text-gray-800 mb-1">SEO Keywords</h3>
+        <p className="text-xs text-gray-500 mb-3">These keywords help generate better reviews for Google ranking.</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {keywords.map(kw => (
+            <span key={kw} className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-sm font-medium">
+              {kw}
+              <button onClick={() => removeKeyword(kw)} className="text-blue-700/60 hover:text-blue-700">
+                <FaTimes size={10} />
+              </button>
+            </span>
+          ))}
+          {keywords.length === 0 && <p className="text-sm text-gray-400">No keywords added.</p>}
+        </div>
+        <div className="flex gap-2 mb-3">
+          <input
+            value={newKeyword}
+            onChange={e => setNewKeyword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
+            placeholder="e.g. best restaurant Ahmedabad"
+            className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]/50 min-h-[44px]"
+          />
+          <button onClick={addKeyword} className="bg-[#1B4D3E] text-white px-4 rounded-xl min-h-[44px] min-w-[48px] flex items-center justify-center">
+            <FaPlus size={14} />
+          </button>
+        </div>
+        <button
+          onClick={saveKeywords}
+          disabled={savingKeywords}
+          className={`w-full py-3 rounded-xl font-semibold text-sm transition-colors min-h-[44px] ${
+            keywordsSaved ? 'bg-green-600 text-white' : 'bg-[#1B4D3E] text-white'
+          }`}
+        >
+          {savingKeywords ? 'Saving...' : keywordsSaved ? '✓ Keywords Saved!' : 'Save Keywords'}
+        </button>
+      </section>
+
       <hr className="border-gray-100" />
 
-      {/* Menu items */}
+      {/* Menu Card */}
       <section>
-        <h3 className="font-semibold text-gray-800 mb-3">
-          {['Restaurant','Cafe'].includes(business.category ?? '') ? 'Menu Items' : 'Services'}
-        </h3>
+        <h3 className="font-semibold text-gray-800 mb-1">Upload Your Menu</h3>
+        <p className="text-xs text-gray-500 mb-4">Upload your menu card so AI can generate more accurate and specific reviews.</p>
+        
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {menuUrls.map((url, idx) => (
+            <div key={idx} className="relative group aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden border border-gray-200">
+              {url.toLowerCase().endsWith('.pdf') ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2 text-center">
+                  <span className="text-2xl text-red-500">📄</span>
+                  <span className="text-[10px] text-gray-500 font-medium truncate w-full">Menu PDF</span>
+                </div>
+              ) : (
+                <img src={url} alt={`Menu ${idx + 1}`} className="w-full h-full object-cover" />
+              )}
+              <button
+                onClick={() => removeMenu(url)}
+                className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+              >
+                <FaTimes size={10} />
+              </button>
+            </div>
+          ))}
+          {menuUrls.length < 3 && (
+            <label className={`aspect-[3/4] rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#1B4D3E]/30 hover:bg-[#1B4D3E]/5 transition-all ${uploadingMenu ? 'opacity-50 pointer-events-none' : ''}`}>
+              <input type="file" className="hidden" accept="image/*,application/pdf" multiple onChange={handleMenuUpload} />
+              {uploadingMenu ? (
+                <FaSpinner className="animate-spin text-[#1B4D3E]" size={20} />
+              ) : (
+                <>
+                  <FaPlus className="text-gray-300" size={20} />
+                  <span className="text-[10px] text-gray-400 font-medium">Add Menu</span>
+                </>
+              )}
+            </label>
+          )}
+        </div>
+        <p className="text-[10px] text-gray-400">Up to 3 images or 1 PDF. Best for high-res menu photos.</p>
+      </section>
+
+      <hr className="border-gray-100" />
+
+      {/* Bill items */}
+      <section>
+        <h3 className="font-semibold text-gray-800 mb-3">Bill Items</h3>
         <div className="space-y-2 mb-4">
           {items.map(item => (
             <div key={item.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-              <span className="text-sm text-gray-700">{item.name}</span>
+              <div className="flex items-center gap-3">
+                <label className="relative group cursor-pointer shrink-0">
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={e => e.target.files?.[0] && handleItemImageUpload(item.id, e.target.files[0])}
+                  />
+                  <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-[#1B4D3E]/50">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <FaImage className="text-gray-300" size={16} />
+                    )}
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <FaPlus className="text-white" size={12} />
+                    </div>
+                  </div>
+                </label>
+                <span className="text-sm text-gray-700 font-medium">{item.name}</span>
+              </div>
               <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
                 <FaTimes size={13} />
               </button>

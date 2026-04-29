@@ -84,18 +84,22 @@ export default function OnboardingPage() {
 
       if (logoFile) {
         const fileExt = logoFile.name.split('.').pop()
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`
-        const filePath = `${fileName}`
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`
         
-        const { error: uploadError } = await supabase.storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from('logos')
-          .upload(filePath, logoFile)
+          .upload(fileName, logoFile, {
+            cacheControl: '3600',
+            upsert: false
+          })
           
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage
+        if (uploadError) {
+          console.error('Logo upload error:', uploadError)
+        } else {
+          const { data: urlData } = supabase.storage
             .from('logos')
-            .getPublicUrl(filePath)
-          logo_url = publicUrl
+            .getPublicUrl(fileName)
+          logo_url = urlData.publicUrl
         }
       }
 
@@ -400,20 +404,13 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* ── STEP 4: Menu Items / Services ── */}
+          {/* ── STEP 4: Bill Items ── */}
           {step === 4 && (
             <div className="flex flex-col flex-1 pt-4 space-y-6">
               <div>
-                <h2 className="text-2xl font-bold">
-                  {category === 'Restaurant' || category === 'Cafe' ? 'Add your star dishes' :
-                   category === 'Salon & Spa' ? 'Add your popular services' :
-                   category === 'Hotel' ? 'Add your room types and amenities' :
-                   category === 'Clinic' ? 'Add your specializations' :
-                   category === 'Retail Store' ? 'Add your popular products' :
-                   'Add your popular items'}
-                </h2>
+                <h2 className="text-2xl font-bold">Add your bill items</h2>
                 <p className="text-gray-500 mt-1 text-sm">
-                  These help personalise reviews with specific {ITEM_LABEL[category] || 'item'} names.
+                  Add items from your menu or services that customers can mention in reviews.
                 </p>
               </div>
 

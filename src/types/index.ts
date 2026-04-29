@@ -9,6 +9,8 @@ export interface Business {
   description?: string | null
   city?: string | null
   area?: string | null
+  keywords?: string[] | null
+  menu_urls?: string[] | null
   created_at: string
 }
 
@@ -24,6 +26,7 @@ export interface MenuItem {
   id: string
   business_id: string
   name: string
+  image_url?: string | null
   sort_order: number
 }
 
@@ -37,6 +40,8 @@ export interface ReviewSession {
   generated_review?: string | null
   status: string
   customer_contact?: string | null
+  customer_name?: string | null
+  customer_phone?: string | null
   private_feedback?: string | null
   created_at: string
 }

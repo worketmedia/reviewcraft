@@ -408,9 +408,9 @@ function BusinessesTab({ businesses, sessions, supabase }: { businesses: Busines
                 </div>
               </div>
 
-              {/* Menu Items */}
+              {/* Bill Items */}
               <div>
-                <h4 className="font-semibold text-gray-700 mb-2">Menu / Services</h4>
+                <h4 className="font-semibold text-gray-700 mb-2">Bill Items</h4>
                 <div className="space-y-1">
                   {panelItems.map(m => <p key={m.id} className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">{m.name}</p>)}
                   {panelItems.length === 0 && <p className="text-sm text-gray-400">None</p>}
